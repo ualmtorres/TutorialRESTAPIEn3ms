@@ -1,0 +1,558 @@
+////
+NO CAMBIAR!!
+Codificación, idioma, tabla de contenidos, tipo de documento
+////
+:encoding: utf-8
+:lang: es
+:toc: right
+:toc-title: Tabla de contenidos
+:doctype: book
+:imagesdir: ./images
+
+
+
+
+////
+Nombre y título del trabajo
+////
+# Tutorial básico de API REST
+Desarrollo de Aplicaciones Híbridas 
+Máster TAII - UAL
+
+// NO CAMBIAR!! (Entrar en modo no numerado de apartados)
+:numbered!: 
+
+
+[abstract]
+##  Resumen
+
+En este tutorial estudiaremos las bases para el desarrollo de una API REST para MongoDB
+
+.Objetivos
+
+* Conocer Mongoose como ODM para MongoDB
+* Aprender a asociar rutas a funciones de la API
+* Aprender a crear una API para las operaciones CRUD básicas de una base de datos
+
+// Entrar en modo numerado de apartados
+:numbered:
+
+## Configuración de MongoDB
+
+### Instalación de MongoDB
+
+https://docs.mongodb.com/manual/tutorial/install-mongodb-on-ubuntu/[Web oficial de descarga de MongoDB]
+
+[source]
+----
+$ sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 2930ADAE8CAF5059EE73BB4B58712A2291FA4AD5
+$ echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu xenial/mongodb-org/3.6 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-3.6.list
+$ sudo apt-get update
+$ sudo apt-get install -y mongodb-org
+$ sudo service mongod start
+----
+
+### Creación de una colección
+
+[source]
+----
+$ mongo
+> use bookstore
+switched to db bookstore
+> db.createCollection('books')
+{ "ok" : 1 }
+----
+
+## Introducción
+
+[source]
+----
+$ mkdir restapi
+$ cd restapi
+$ npm init
+----
+
+Completamos con los valores predeterminados salvo en el archivo principal, que introduciremos `app.js`.
+
+.El archivo `package.json`
+====
+[source]
+----
+{
+  "name": "restapi",
+  "version": "1.0.0",
+  "description": "API REST para MongoDB",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": { <1>
+    "express": "*",
+    "body-parser": "*",
+    "mongoose": "*"
+  },
+  "author": "Manuel Torres",
+  "license": "ISC"
+}
+----
+<1> Lista de dependencias del proyecto. Necesitamos `bodyparser` para que Node.js pueda tratar correctamente los streams JSON de la API
+====
+
+[source]
+----
+$ npm install
+----
+
+[TIP]
+====
+Para no tener que estar reiniciando la aplicación cada vez que hagamos un cambio se recomienda instalar `nodemon`
+[source]
+----
+$ sudo npm install -g nodemon
+$ nodemon
+----
+====
+
+.El archivo `app.js`
+====
+[source]
+----
+var express = require('express');
+var app = express();
+var bodyParser = require('body-parser');
+var mongoose = require('mongoose');
+
+mongoose.connect('mongodb://localhost/bookstore');
+var db = mongoose.connection;
+
+app.get('/', function(req, res) {
+    res.send('Hola a todos');
+});
+
+app.listen(3000);
+console.log("Running en puerto 3000...")
+----
+====
+
+### Obtener todos los géneros
+
+#### Crear el modelo 
+
+.El archivo `models/genre.js`
+====
+[source]
+----
+var mongoose = require('mongoose');
+
+var genreSchema = mongoose.Schema({ <1>
+    name: {
+        type: String,
+        required: true
+    },
+    create_date: {
+        type: Date,
+        default: Date.now
+    }
+});
+
+var Genre = module.exports = mongoose.model('Genre', genreSchema); <2>
+
+// Get Genres
+module.exports.getGenres = function (callback){ <3>
+    Genre.find().exec(callback); <4>
+}
+----
+<1> Esquema Mongoose para géneros
+<2> El esquema se exporta como `Genre`
+<3> Exportar la función `getGenres` como una función con un argumento, la función de _callback_
+<4> Uso de Mongoose para hacer un `find` sobre `Genre` y devolver los resultados en la función de _callback_
+====
+
+#### Creación de la ruta 
+.Modificación del archivo `app.js`
+====
+[source]
+----
+....
+Genre = require('./models/genre'); <1> Incluir el modelo
+...
+app.get('/api/genres', function(req, res) { <2> 
+    Genre.getGenres(function(err, genres) { <3>
+        if (err) {
+            throw err;
+        }
+        res.json(genres);
+    })
+
+});
+...
+----
+<1> Ruta para géneros
+<2> Definición de la ruta
+<3> Llamada a `getGenres()` pasándole la función _callback_. Si no hay error devuelve el JSON de los géneros
+====
+
+### Obtener todos los libros
+
+#### Crear el modelo
+
+.El archivo `models/book.js`
+====
+[source]
+----
+var mongoose = require('mongoose');
+
+var bookSchema = mongoose.Schema({ <1>
+    title: {
+        type: String,
+        required: true
+    },
+    genre: {
+        type: String,
+        required: true
+    },
+    description: {
+        type: String
+    },
+    author: {
+        type: String,
+        required: true
+    },
+    publisher: {
+        type: String
+    },
+    pages: {
+        type: Number
+    },
+    image_url: {
+        type: String
+    },
+    create_date: {
+        type: Date,
+        default: Date.now
+    }
+});
+
+var Book = module.exports = mongoose.model('Book', bookSchema); <2>
+
+// Get Books
+module.exports.getBooks = function (callback){ <3>
+    Book.find().exec(callback) <4>
+}
+----
+<1> Esquema Mongoose para libros
+<2> El esquema se exporta como `Book`
+<3> Exportar la función `getBooks` como una función con un argumento, la función de _callback_
+<4> Uso de Mongoose para hacer un `find` sobre `Book` y devolver los resultados en la función de _callback_
+====
+
+#### Creación de la ruta 
+.Modificación del archivo `app.js`
+====
+[source]
+----
+....
+Book = require('./models/book'); <1> Incluir el modelo
+...
+app.get('/api/books', function(req, res) { <2>
+    Book.getBooks(function(err, books) { <3>
+        if (err) {
+            throw err;
+        }
+        res.json(books);
+    })
+
+});
+...
+----
+<1> Ruta para géneros
+<2> Definición de la ruta
+<3> Llamada a `getBooks()` pasándole la función _callback_. Si no hay error devuelve el JSON de los libros
+====
+
+### Obtener libros por id
+
+#### Añadir la función al modelo
+
+.Modificar `models/book.js`
+====
+[source]
+----
+....
+// Get Book by id
+module.exports.getBookById = function (id, callback){ <1>
+    Book.findById(id).exec(callback) <2>
+}
+----
+<1> Exportar la función `getBookById` como una función con dos argumentos: el id del libro a buscar y la función de _callback_
+<2> Uso de Mongoose para hacer un `findById` sobre `Book` y devolver los resultados en la función de _callback_
+====
+
+#### Creación de la ruta 
+.Modificación del archivo `app.js`
+====
+[source]
+----
+...
+app.get('/api/books/:_id', function(req, res) { <1>
+    Book.getBookById(req.params._id, function(err, book) { <2>
+        if (err) {
+            throw err;
+        }
+        res.json(book);
+    })
+
+});
+...
+----
+<1> Definición de la ruta pasando un parámetro denominado `_id`
+<2> Llamada a `getBookById()` pasándole el parámetro `_id` y la función _callback_. Si no hay error devuelve el JSON del libro
+====
+
+### Añadir un género
+
+#### Añadir la función al modelo
+
+.Modificar `models/genre.js`
+====
+[source]
+----
+....
+// Add Genre
+module.exports.addGenre = function (genre, callback){ <1>
+    Genre.create(genre, callback); <2>
+}
+----
+<1> Exportar la función `addGenre` como una función con dos argumentos: el JSON del género a insertar y la función de _callback_
+<2> Uso de Mongoose para crear un género sobre `Genre` y devolver los resultados en la función de _callback_
+====
+
+#### Creación de la ruta 
+
+[NOTE]
+====
+Es necesario incluir `app.use(bodyParser.json())` en `app.js` para poder acceder al JSON al usar `post` y `put` en inserciones y modificaciones
+====
+
+.Modificación del archivo `app.js`
+====
+[source]
+----
+...
+app.use(bodyParser.json()); <1>
+....
+app.post('/api/genres', function(req, res) { <2>
+    var genre = req.body; <3>
+    Genre.addGenre(genre, function(err, genre) { <4>
+        if (err) {
+            throw err;
+        }
+        res.json(genre);
+    })
+
+});
+...
+----
+<1> Necesario para poder recibir JSON
+<2> Definición de la ruta. Es similar a la de un `GET`, salvo que la acción es `POST`
+<3> Creación de un objeto para el JSON del género a crear y que viene como parámetro en la llamada a la API
+<4> Llamada a `addGenre()` pasándole el parámetro `genre` y la función _callback_. Si no hay error, crea el nuevo género y lo devuelve como JSON
+====
+
+### Modificar un género
+
+### Añadir la función al modelo
+
+.Modificar `models/genre.js`
+====
+[source]
+----
+....
+// Update Genre
+module.exports.updateGenre = function (id, genre, callback){ <1>
+    var query = {_id: id}; <2>
+    var update = {name: genre.name}; <3>
+    Genre.findOneAndUpdate(query, update, callback); <4>
+}
+----
+<1> Exportar la función `updateGenre` como una función con tres argumentos: el id del género a modificar, el JSON del género a modificar y la función de _callback_
+<2> Definir la consulta a ejecutar tomando el `id` como parámetro
+<3> Definir la actualización a realizar sustituyendo el género por el valor del campo `name` en el objeto JSON pasado al `PUT`
+<4> Uso de Mongoose para modificar `Genre` y devolver los resultados en la función de _callback_
+====
+
+#### Creación de la ruta 
+
+.Modificación del archivo `app.js`
+====
+[source]
+----
+...
+app.put('/api/genres/:_id', function(req, res) { <1>
+    var id = req.params._id; <2>
+    var genre = req.body; <3>
+    Genre.updateGenre(id, genre, function(err, genre) { <4>
+        if (err) {
+            throw err;
+        }
+        res.json(genre);
+    })
+
+});
+
+----
+<1> Definición de la ruta. Es similar a la de un `GET` y un `POST`, salvo que la acción es `PUT`
+<2> Obtener el id que viene como parámetro
+<3> Creación de un objeto para el JSON del género a modificar y que viene como parámetro en la llamada a la API
+<4> Llamada a `updateGenre()` pasándole como parámetros el `id` del geńero a modificar, el JSON con los nuevos valores del género y la función _callback_. Si no hay error, modifica el género y lo devuelve como JSON
+====
+
+### Modificar un libro
+
+[NOTE]
+====
+Para modificar podemos usar las funciones `findOneAndUpdate` y `findByIdAndUpdate`. La primera es más general y permite actualizar tomando cualquier condición como condición de búsqueda (en nuestro caso el `id`), La segunda está orientada a modificar a partir del `id`.
+Para practicar con ambas, haremos la modificación con la variante `findOne` y la eliminación más adelante con `findById`.
+====
+
+### Añadir la función al modelo
+
+.Modificar `models/book.js`
+====
+[source]
+----
+....
+// Update Book
+module.exports.updateBook = function (id, book, callback){ <1>
+    var query = {_id: id}; <2>
+    var update = { <3>
+        title: book.title,
+        genre: book.genre,
+        description: book.description,
+        author: book.author,
+        publisher: book.publisher,
+        pages: book.pages,
+        image_url: book.image_url
+    };
+    Book.findOneAndUpdate(query, update, callback); <4>
+}
+----
+<1> Exportar la función `updateBook` como una función con tres argumentos: el id del libro a modificar, el JSON del libro a modificar y la función de _callback_
+<2> Definir la consulta a ejecutar tomando el `id` como parámetro
+<3> Definir la actualización a realizar sustituyendo los campos en la base de datos por el valor de los campos del objeto JSON pasado al `PUT`
+<4> Uso de Mongoose para modificar `Book` y devolver los resultados en la función de _callback_
+====
+
+#### Creación de la ruta 
+
+.Modificación del archivo `app.js`
+====
+[source]
+----
+...
+app.put('/api/books/:_id', function(req, res) { <1>
+    var id = req.params._id; <2>
+    var book = req.body; <3>
+    Book.updateBook(id, book, function(err, book) { <4>
+        if (err) {
+            throw err;
+        }
+        res.json(book);
+    })
+
+});
+...
+----
+<1> Definición de la ruta. Es similar a la de un `GET` y un `POST`, salvo que la acción es `PUT`
+<2> Obtener el id que viene como parámetro
+<3> Creación de un objeto para el JSON del libro a modificar y que viene como parámetro en la llamada a la API
+<4> Llamada a `updateBook()` pasándole como parámetros el `id` del libro a modificar, el JSON con los nuevos valores del libro y la función _callback_. Si no hay error, modifica el libro y lo devuelve como JSON
+====
+
+### Eliminación de un género
+
+[NOTE]
+====
+Para eliminar podemos usar las funciones `findOneAndDelete` y `findByIdAndDelete`. La primera es más general y permite eliminar tomando cualquier condición como condición de búsqueda (en nuestro caso el `id`), La segunda está orientada a eliminar a partir del `id`.
+Para practicar con ambas, anteriormente hicimos la modificación con la variante `findOne` y ahora haremos la eliminación con `findById`.
+====
+
+.Modificar `models/genre.js`
+====
+[source]
+----
+....
+// Delete Genre
+module.exports.deleteGenre = function (id, callback){ <1>
+    Genre.findByIdAndRemove(id, callback); <2>
+}
+----
+<1> Exportar la función `deleteGenre` como una función con dos argumentos: el id del género a eliminar y la función de _callback_
+<2> Uso de Mongoose para eliminar el género de `Genre` y devolver los resultados en la función de _callback_
+====
+
+#### Creación de la ruta 
+
+.Modificación del archivo `app.js`
+====
+[source]
+----
+...
+app.delete('/api/genres/:_id', function(req, res) { <1>
+    var id = req.params._id; <2>
+    Genre.deleteGenre(id, function(err, genre) { <3>
+        if (err) {
+            throw err;
+        }
+        res.json(genre);
+    })
+
+});
+
+...
+----
+<1> Definición de la ruta. Es similar a la de un `GET`, `POST` o `PUT`, salvo que la acción es `DELETE`
+<2> Obtener el id que viene como parámetro
+<3> Llamada a `deleteGenre()` pasándole como parámetros el `id` del género a eliminar y la función _callback_. Si no hay error, elimina el género y devuelve como JSON el género eliminado
+====
+
+### Eliminación de un libro
+
+
+.Modificar `models/book.js`
+====
+[source]
+----
+....
+// Delete Book
+module.exports.deleteBook = function (id, callback){ <1>
+    Book.findByIdAndRemove(id, callback); <2>
+}
+----
+<1> Exportar la función `deleteBook` como una función con dos argumentos: el id del libro a eliminar y la función de _callback_
+<2> Uso de Mongoose para eliminar el género de `Book` y devolver los resultados en la función de _callback_
+====
+
+#### Creación de la ruta 
+
+.Eliminación del archivo `app.js`
+====
+[source]
+----
+...
+app.delete('/api/books/:_id', function(req, res) { <1>
+    var id = req.params._id; <2>
+    Book.deleteBook(id, function(err, book) { <3>
+        if (err) {
+            throw err;
+        }
+        res.json(book);
+    })
+
+});
+...
+----
+<1> Definición de la ruta. Es similar a la de un `GET`, `POST` o `PUT`, salvo que la acción es `DELETE`
+<2> Obtener el id que viene como parámetro
+<3> Llamada a `deleteBook()` pasándole como parámetros el `id` del libro a eliminar y la función _callback_. Si no hay error, elimina el libro y devuelve como JSON el libro eliminado
+====
